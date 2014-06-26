@@ -1,9 +1,8 @@
 // ==UserScript==
-// @name          Planets.nu - Planetary Management Plugin
-// @description   Planetary Management Plugin
-// @version       2.2
-// @author        Dotman
-// @contributor   Jim Clark
+// @name          Planets.nu - Planetary Management Plugin v2
+// @description   Planetary Management Plugin v2
+// @version       2.3
+// @author        Jim Clark
 // @include       http://planets.nu/#/*
 // @include       http://planets.nu/*
 // @include       http://play.planets.nu/*
@@ -13,13 +12,17 @@
 // @history		  1.01	 Main Release
 // @history		  1.11	 Stellar Cartography Support, Filters, Global Method Applications
 // @history		  1.20   Nu 1.16 Support - Large Saving
-// @history		  2.0    This is a fork from dotmans original script. Fixes/Enhancements included are numerous and (some) forgotten
+// @history		  2.0    This is a fork from dotmans original script. Fixes/Enhancmenets included are neumerous and (some) forgotten
 //							- Removed build screen popup which cuts HUGE amounts of time from the build function
 //                          - Added new taxation methods; riot and notax
 //                          - Added more default tax and build options
-//                          - Reorganized management window to make it harder to screwup all your settings
+//                          - Reorginiazed managmenet window to make it harder to screwup all your settings
 //                          - More?
 // @history		  2.2    Removes "autotax" checkbox from planets when they are built
+// @history		  2.3    Added autotax build method which checks the autotax box in planets.nu. Usefull for vacation taxing.
+//
+// @todo	
+//	Tax cap 5000mc.
 // ==/UserScript==
 
 
@@ -30,7 +33,7 @@ function wrapper () { // wrapper for injection
         return;	
     }
     
-    var plugin_version = 2.2;
+    var plugin_version = 2.3;
     var debug = false;
     
     console.log("Planetary Manager plugin version: v" + plugin_version );
@@ -1897,6 +1900,8 @@ Safe <br /> \
 Riot <br /> \
 <input type='radio' value='No Tax' name='tmmethrad' id='TMMethRadN' /> \
 No Tax <br /> \
+<input type='radio' value='Auto Tax' name='tmmethrad' id='TMMethRadA' /> \
+Auto Tax <br /> \
 Parameters: <br />\
 <div id='TMWizMinHappy'> \
 <label>Minimum Happiness: \
@@ -1924,6 +1929,8 @@ Safe <br /> \
 Riot <br /> \
 <input type='radio' value='No Tax' name='tmmidmethrad' id='TMMidMethRadN' /> \
 No Tax <br /> \
+<input type='radio' value='Auto Tax' name='tmmidmethrad' id='TMMidMethRadA' /> \
+Auto Tax <br /> \
 Parameters: <br />\
 <div id='TMWizMidMinHappy'> \
 <label>Minimum Happiness: \
@@ -2012,6 +2019,8 @@ Parameters: <br />\
                                 newtmodel.midmethod = "Riot";
                             if ($('#TMMidMethRadN').attr('checked'))
                                 newtmodel.midmethod = "No Tax";
+                            if ($('#TMMidMethRadA').attr('checked'))
+                                newtmodel.midmethod = "Auto Tax";
                             newtmodel.midMinHappy = $('#TMWizMidMinHappyTxtBox').val();
                             newtmodel.midMaxHappy = $('#TMWizMidMaxHappyTxtBox').val();
                         }
@@ -2031,6 +2040,8 @@ Parameters: <br />\
                                 newtmodel.midmethod = "Riot";
                             if ($('#TMMidMethRadN').attr('checked'))
                                 newtmodel.midmethod = "No Tax";
+                            if ($('#TMMidMethRadA').attr('checked'))
+                                newtmodel.midmethod = "Auto Tax";
                             newtmodel.maxMinHappy = $('#TMWizMaxMinHappyTxtBox').val();
                             newtmodel.maxMaxHappy = $('#TMWizMaxMaxHappyTxtBox').val();
                         }
@@ -2400,6 +2411,22 @@ Parameters: <br />\
             taxModel7.maxmethod = "No Tax";
             taxModel7.maxMinHappy = "";
             taxModel7.maxMaxHappy = "";
+
+            var taxModel8 = new Object();
+            taxModel7.name = "Auto Tax";
+            taxModel7.method = "Auto Tax";
+            taxModel7.taxType = "CN";
+            taxModel7.minHappy = 100;
+            taxModel7.maxHappy = 100;
+            taxModel7.minClans = 0;
+            taxModel7.midsame = true;
+            taxModel7.midmethod = "Auto Tax";
+            taxModel7.midMinHappy = "";
+            taxModel7.midMaxHappy = "";
+            taxModel7.maxsame = true;
+            taxModel7.maxmethod = "Auto Tax";
+            taxModel7.maxMinHappy = "";
+            taxModel7.maxMaxHappy = "";
             
             vgap.plugins["plManagerPlugin"].taxmethods.push(taxModel1);
             vgap.plugins["plManagerPlugin"].taxmethods.push(taxModel2);
@@ -2408,6 +2435,7 @@ Parameters: <br />\
             vgap.plugins["plManagerPlugin"].taxmethods.push(taxModel5);
             vgap.plugins["plManagerPlugin"].taxmethods.push(taxModel6);
             vgap.plugins["plManagerPlugin"].taxmethods.push(taxModel7);            
+            vgap.plugins["plManagerPlugin"].taxmethods.push(taxModel8); 
         },
         
         readNotes: function() {
@@ -4033,7 +4061,7 @@ Parameters: <br />\
                 maxmc = 5000;
             if (debug) console.log("In SAFE TAX Cols: minHappy = " + taxmodel.minHappy + ", colhappy = " + planet.colonisthappypoints + ", minHap - hapmod = " + (taxmodel.minHappy - hapmod));
             var nhchng = (taxmodel.minHappy-hapmod) - (planet.colonisthappypoints);
-            console.log("nhchng = " + nhchng);
+            //console.log("nhchng = " + nhchng);
                        
             return vgap.plugins["plManagerPlugin"].findColonistRate(planet, nhchng);
             
@@ -4162,7 +4190,7 @@ Parameters: <br />\
         },
         
         executePlanetUpdate: function() {
-            console.log("ENTERED EXPLUP");
+           // console.log("ENTERED EXPLUP");
             var plg = vgap.plugins["plManagerPlugin"];
             if (vgap.plugins["plManagerPlugin"].planetbuildindex >= plg.parray.length) {
                 // We're done
@@ -4174,8 +4202,7 @@ Parameters: <br />\
                 vgap.plugins["plManagerPlugin"].displayPM(0);
                 //vgap.plugins["plManagerPlugin"].saveChanges();
                 vgap.save();
-            }
-            else {
+            } else {
                 var planet = plg.parray[vgap.plugins["plManagerPlugin"].planetbuildindex];
                 vgap.plugins["plManagerPlugin"].ambuilding = true;
                 vgap.plugins["plManagerPlugin"].buildstatustext = "Building " + (vgap.plugins["plManagerPlugin"].planetbuildindex+1) + " of " + plg.parray.length + "  #" + planet.id + " - " + planet.name;
@@ -4197,40 +4224,39 @@ Parameters: <br />\
                         planet.friendlycode = vgap.randomFC();
                         planet.changed = 1;
                         var identifier = "#FCDisp_" + planet.id;
-                        console.log("SELECTOR: " + identifier);
+                       // console.log("SELECTOR: " + identifier);
                         $(identifier).replaceWith("<td class=FCDisp data-plid='" + planet.id + "' id='FCDisp_" + planet.id + "' align='center' width='30px' style='border: solid white 1px; color: #0000A0; background-color: " + vgap.plugins["plManagerPlugin"].getFCColor(planet.friendlycode) + ";'><b>" + planet.friendlycode + "</b></td>");
                     }
                 }
                 
-                // Turn off autotax!!!!!
-                if (planet.colchange == 1) {
+                console.log("Bulding " + planet.name + " ->");                                                    
+                console.log("       " + plg.buildmethods[plg.bmarray[planet.id]][0]);
+                console.log("       " + plg.taxmethods[plg.ctarray[planet.id]].name + "/" + (planet.nativeclans > 0 ? plg.taxmethods[plg.ntarray[planet.id]].name : "-"));
+		        vgap.plugins["plManagerPlugin"].planetBuildBldgs();
+
+                // Handle AutoTax check box
+                if (plg.taxmethods[plg.ctarray[planet.id]].name == "Auto Tax") {
+					planet.colchange = 1;
+    	            planet.changed = 1;
+                    //console.log("Auto taxing on " + planet.name);
+				} else {
 	                planet.colchange = 0;
     	            planet.changed = 1;
-                }
-                
-                vgap.plugins["plManagerPlugin"].planetBuildBldgs();
-                vgap.plugins["plManagerPlugin"].planetSetTaxGeneral(false);
-                
-                planet.changed = 1;
-                
-                // Modification: Only save after processing every 3rd planet
-                
-                // 2nd Modification V1.20: Save at the end
-                //plg.quickBreak();
-                vgap.plugins["plManagerPlugin"].planetbuildindex++;
-                vgap.plugins["plManagerPlugin"].executePlanetUpdate();
-                /*
-					if (vgap.plugins["plManagerPlugin"].planetbuildindex % 25 == 0 || vgap.plugins["plManagerPlugin"].planetbuildindex == plg.parray.length-1)
-						vgap.plugins["plManagerPlugin"].saveChanges();
-					else {
-						vgap.plugins["plManagerPlugin"].planetbuildindex++;
-						vgap.plugins["plManagerPlugin"].executePlanetUpdate();
-					}
-					*/
-                }
-                
-                return;
-            },
+                    vgap.plugins["plManagerPlugin"].planetSetTaxGeneral(false);
+				}
+		        
+		        planet.changed = 1;
+		        
+		        // Modification: Only save after processing every 3rd planet
+		        
+		        // 2nd Modification V1.20: Save at the end
+		        //plg.quickBreak();
+		        vgap.plugins["plManagerPlugin"].planetbuildindex++;
+		        vgap.plugins["plManagerPlugin"].executePlanetUpdate();
+            }
+            
+            return;
+        },
         
         quickBreak: function() {
             var plg = vgap.plugins["plManagerPlugin"];
@@ -4541,7 +4567,7 @@ Parameters: <br />\
             else
                 burnsups = false;
             
-            console.log("IN BUILD BUILDINGS: BURNSUPS = " + burnsups);
+            //console.log("IN BUILD BUILDINGS: BURNSUPS = " + burnsups);
             
             var planet;
             if (predict)
@@ -4627,7 +4653,7 @@ Parameters: <br />\
                     }
                 }
                 if (buildtype == 'd') {
-                    console.log("Entered build defense");
+                    //console.log("Entered build defense");
                     // Building defense posts
                     numbuildtemp = Math.max(0,buildcount - planet.defense);
                     if (debug) console.log("numbuildtemp set");
@@ -5014,30 +5040,10 @@ Parameters: <br />\
             
             //var nhchng = 20;
             var nhchng = 70 - planet.colonisthappypoints;
-            
-            // Troubleshooting
-            if (planet.id == dpi) {
-                console.log("nhchng init:" + nhchng);
-            }
-            
-            // Troubleshooting
-            if (planet.id == dpi) {
-                console.log("nhchng after riot check:" + nhchng);
-            }
-            
-            
+                      
             // Find the rate iteratively instead
             
-            var rate = vgap.plugins["plManagerPlugin"].findColonistRate(planet,nhchng);
-            
-            // Troubleshooting
-            if (planet.id == dpi) {
-                console.log("rate:" + rate);
-            }
-            
-            
-            
-            
+            var rate = vgap.plugins["plManagerPlugin"].findColonistRate(planet,nhchng);       
             
             if (planet.id == dpi) {
                 if (debug) console.log("rate final:" + rate);
@@ -5447,3 +5453,4 @@ script.type = "application/javascript";
 script.textContent = "(" + wrapper + ")();";
 
 document.body.appendChild(script);
+
