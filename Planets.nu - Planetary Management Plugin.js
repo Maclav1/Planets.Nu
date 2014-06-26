@@ -20,6 +20,7 @@
 //                          - More?
 // @history		  2.2    Removes "autotax" checkbox from planets when they are built
 // @history		  2.3    Added autotax build method which checks the autotax box in planets.nu. Usefull for vacation taxing.
+// @history		  2.4    Fixed bug with manual taxing.
 //
 // @todo	
 //	Tax cap 5000mc.
@@ -4230,12 +4231,12 @@ Parameters: <br />\
                 }
                 
                 console.log("Bulding " + planet.name + " ->");                                                    
-                console.log("       " + plg.buildmethods[plg.bmarray[planet.id]][0]);
-                console.log("       " + plg.taxmethods[plg.ctarray[planet.id]].name + "/" + (planet.nativeclans > 0 ? plg.taxmethods[plg.ntarray[planet.id]].name : "-"));
+               // console.log("       " + plg.buildmethods[plg.bmarray[planet.id]][0]);
+               // console.log("       " + plg.taxmethods[plg.ctarray[planet.id]].name + "/" + (planet.nativeclans > 0 ? plg.taxmethods[plg.ntarray[planet.id]].name : "-"));
 		        vgap.plugins["plManagerPlugin"].planetBuildBldgs();
 
                 // Handle AutoTax check box
-                if (plg.taxmethods[plg.ctarray[planet.id]].name == "Auto Tax") {
+                if (plg.ctarray[planet.id] != 'm' && plg.taxmethods[plg.ctarray[planet.id]].name == "Auto Tax") {
 					planet.colchange = 1;
     	            planet.changed = 1;
                     //console.log("Auto taxing on " + planet.name);
