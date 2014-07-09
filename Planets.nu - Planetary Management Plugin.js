@@ -2,7 +2,8 @@
 // @name          Planets.nu - Planetary Management Plugin v2
 // @description   Planetary Management Plugin v2
 // @version       2.3
-// @author        Jim Clark
+// @author        Dotman
+// @contributor	  Jim Clark
 // @include       http://planets.nu/#/*
 // @include       http://planets.nu/*
 // @include       http://play.planets.nu/*
