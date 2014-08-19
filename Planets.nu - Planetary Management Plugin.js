@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Planets.nu - Planetary Management Plugin v2
 // @description   Planetary Management Plugin v2
-// @version       2.3
+// @version       2.41
 // @author        Dotman
 // @contributor	  Jim Clark
 // @include       http://planets.nu/#/*
@@ -22,7 +22,7 @@
 // @history		  2.2    Removes "autotax" checkbox from planets when they are built
 // @history		  2.3    Added autotax build method which checks the autotax box in planets.nu. Usefull for vacation taxing.
 // @history		  2.4    Fixed bug with manual taxing.
-//
+// @history		  2.41	 Fixed Borg Overtax Bug
 // @todo	
 //	Tax cap 5000mc.
 // ==/UserScript==
@@ -35,7 +35,7 @@ function wrapper () { // wrapper for injection
         return;	
     }
     
-    var plugin_version = 2.3;
+    var plugin_version = 2.41;
     var debug = false;
     
     console.log("Planetary Manager plugin version: v" + plugin_version );
@@ -3997,6 +3997,14 @@ Parameters: <br />\
                 rate = Math.truncate(maxmc / (planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000));
                 if (planet.nativetype == 6)
                     rate = Math.truncate((maxmc/2) / (planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000));
+            }
+            
+            // V2.41 - Cyborg taxing natives over 20% bugfix
+            // Check player, if borg, don't tax over 20%
+            var player = vgap.getPlayer(planet.ownerid);
+            if (player != null) {
+				if (player.raceid == 6 && rate > 20)
+					rate = 20;
             }
             
             if (taxmodel.method == "Riot") {
