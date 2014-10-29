@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name          Planets.nu - Planetary Management Plugin v2
 // @description   Planetary Management Plugin v2
-// @version       2.41
+// @version       3.0
+// @copyright	  2014, Dotman
+// @license		  CC BY-NC-ND 4.0 (http://creativecommons.org/licenses/by-nc-nd/4.0/)
 // @author        Dotman
 // @contributor	  Jim Clark
 // @include       http://planets.nu/#/*
@@ -20,11 +22,17 @@
 //                          - Reorginiazed managmenet window to make it harder to screwup all your settings
 //                          - More?
 // @history		  2.2    Removes "autotax" checkbox from planets when they are built
-// @history		  2.3    Added autotax build method which checks the autotax box in planets.nu. Usefull for vacation taxing.
+// @history		  2.3    Added autotax build method which checks the autotax box in planets.nu. Useful for vacation taxing.
 // @history		  2.4    Fixed bug with manual taxing.
 // @history		  2.41	 Fixed Borg Overtax Bug
-// @todo	
-//	Tax cap 5000mc.
+// @history		  3.0	 Starmap Overlays added
+//						 Planet Screen method selection and single planet build added
+//							Bugfixes:
+//								5000mc limit on colonist tax implemented
+//								5000mc limit on colonist and native tax implemented
+//								FC randomize button bug fixed
+//								Fed 200% Taxing bug fixed
+//								Default tax method growth tax, at popmax, taxed only down to 50; adjusted back to 40 (bug came in in v2.0?)
 // ==/UserScript==
 
 
@@ -35,10 +43,10 @@ function wrapper () { // wrapper for injection
         return;	
     }
     
-    var plugin_version = 2.41;
+    var plugin_version = 3.0;
     var debug = false;
     
-    console.log("Planetary Manager plugin version: v" + plugin_version );
+    console.log("Map Beta: Planetary Manager plugin version: v" + plugin_version );
 
     var plManagerPlugin = {
         
@@ -224,8 +232,16 @@ padding: 10px;}");
 color: #FF0000; \
 font-weight: bold; \
 text-size: 16px;}");			
-            
-            
+            vgap.plugins["plManagerPlugin"].addCss("#MPPLBMTable { \
+width: 400px; \
+overflow: hidden; \
+    display: inline-block; \
+    white-space: nowrap;}");
+    
+			vgap.plugins["plManagerPlugin"].addCss(".MPBMSelect { width: 110px;}");
+			vgap.plugins["plManagerPlugin"].addCss(".MPCTSelect { width: 110px;}");
+			vgap.plugins["plManagerPlugin"].addCss(".MPNTSelect { width: 110px;}");
+			
             vgap.plugins["plManagerPlugin"].addCss("#BMSelTable, #TMSelTable { \
 border-radius: 10px; \
 background-color: rgba(0,0,0,0.2); \
@@ -241,6 +257,43 @@ color: #00FF00;}");
             
             vgap.plugins["plManagerPlugin"].addCss("#BMSelTable td{ \
 padding-left: 20px;}");
+
+			// New Map CSS Stuff
+			vgap.plugins["plManagerPlugin"].addCss("#PlanetsLoc { \
+right: 68px;}");
+
+			vgap.plugins["plManagerPlugin"].addCss(".PMMapBtn { \
+padding-right: 1px; \
+padding-left: 1px}");
+			
+			vgap.plugins["plManagerPlugin"].addCss("#PMMapBtnBar { \
+position: absolute; \
+color: white; \
+font-size: 12px; \
+text-align: center; \
+font-weight: bold; \
+top: 58px; \
+right: 6px; \
+width: 52px; \
+background-color: rgba(30,30,30,30.2); \
+padding: 3px; \
+box-shadow: 2px 2px 2px #777777}");
+
+			vgap.plugins["plManagerPlugin"].addCss("#PMMapDrawBar { \
+position: absolute; \
+color: white; \
+font-size: 12px; \
+text-align: center; \
+font-weight: bold; \
+top: 58px; \
+right: -28px; \
+width: 26px; \
+background-color: rgba(30,30,30,30.2); \
+padding: 3px; \
+box-shadow: 2px 2px 2px #777777}");
+// width: 52px
+// right: 6px
+
             
             // End CSS
             
@@ -258,6 +311,7 @@ padding-left: 20px;}");
                 taxmethods = [];
                 parray = [];
                 
+                
                 // Read Notes
                 if (debug) console.log("Preparing To Read.  YOU SHOULD ALWAYS SEE THIS LINE AND IT SHOULD BE EASY TO SEE BECAUSE ITS IN CAPS AND HAS STARS IN IT!!!! *******");
                 plg.readOrder = 1;
@@ -266,6 +320,117 @@ padding-left: 20px;}");
                 
                 vgap.plugins["plManagerPlugin"].buildstatustext = "Idle";
                 plg.validateArrays();
+                
+                // Configure map overlay click sets
+                plg.pmmcOverlay = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false];
+                plg.pmmcLastOverlay = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false];
+                
+                // Overlay index configuration:
+                // 0 - Neutronium
+                // 1 - Duranium
+                // 2 - Tritanium
+                // 3 - Molybdenum
+                // 4 - Planet Names
+                // 5 - Planet Temperatures
+                // 6 - Colonists
+                // 7 - Natives
+                // 8 - Colonist Tax Info
+                // 9 - Native Tax Info
+                // 10 - Supplies
+                // 11 - Megacredits
+                // 12 - Build Method
+                // 13 - Factories
+                // 14 - Mines
+                // 15 - Defense Posts
+				// 16 - SB Build
+				// 17 - SB Tech Levels
+				// 18 - SB Defenses
+				
+                
+                
+                // Load map overlay images
+                plg.pmiNeutN = new Image();
+                pmiNeutH = new Image();
+				pmiDurN = new Image();
+				pmiDurH = new Image();
+				pmiTriN = new Image();
+				pmiTriH = new Image();
+				pmiMolyN = new Image();
+				pmiMolyH = new Image();
+				
+				plg.pmiNeutN.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/Neut2Big_zps561825e1.png';
+                plg.pmiNeutH.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/NeutHov2Big_zps7e03b204.png';
+                plg.pmiDurN.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/Dur2Big_zpsa7416722.png';
+                plg.pmiDurH.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/DurHov2Big_zps533da55a.png';
+                plg.pmiTriN.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/Trit2Big_zpsde278d77.png';
+                plg.pmiTriH.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/TritHov2Big_zps4ac49fad.png';
+                plg.pmiMolyN.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/Moly2Big_zpsd1092909.png';
+                plg.pmiMolyH.src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/MolyHov2Big_zps063bfe20.png';
+                
+                for (var i = 0; i < 20; i++) {
+					plg.pmmiNormal[i] = new Image();
+					plg.pmmiHover[i] = new Image();
+				}
+				plg.pmmiNormal[0].src = 'http://planets.nu/_library/2014/10/neut2mid.png';
+				plg.pmmiNormal[1].src = 'http://planets.nu/_library/2014/10/dur2mid.png';
+				plg.pmmiNormal[2].src = 'http://planets.nu/_library/2014/10/trit2mid.png';
+				plg.pmmiNormal[3].src = 'http://planets.nu/_library/2014/10/moly2mid.png';
+				plg.pmmiNormal[4].src = 'http://planets.nu/_library/2014/10/planet2mid.jpg';
+				plg.pmmiNormal[5].src = 'http://planets.nu/_library/2014/10/fmid.jpg';
+				plg.pmmiNormal[6].src = 'http://planets.nu/_library/2014/10/colpic2mid.jpg';
+				plg.pmmiNormal[7].src = 'http://planets.nu/_library/2014/10/natpic2mid.jpg';
+				plg.pmmiNormal[8].src = 'http://planets.nu/_library/2014/10/col2mid.png';
+				plg.pmmiNormal[9].src = 'http://planets.nu/_library/2014/10/neut2mid.png';
+				plg.pmmiNormal[10].src = 'http://planets.nu/_library/2014/10/sup2mid.png';
+				plg.pmmiNormal[11].src = 'http://planets.nu/_library/2014/10/mc2mid.png';
+				plg.pmmiNormal[12].src = 'http://planets.nu/_library/2014/10/sbtech2mid.jpg';
+				plg.pmmiNormal[13].src = 'http://planets.nu/_library/2014/10/fact2mid.jpg';
+				plg.pmmiNormal[14].src = 'http://planets.nu/_library/2014/10/mine2mid.jpg';
+				plg.pmmiNormal[15].src = 'http://planets.nu/_library/2014/10/def2mid.jpg';
+				plg.pmmiNormal[16].src = 'http://planets.nu/_library/2014/10/sbbuild2mid.jpg';
+				plg.pmmiNormal[17].src = 'http://planets.nu/_library/2014/10/sb2mid.jpg';
+				//plg.pmmiNormal[18].src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/Neut2Mid_zps78c30af0.png';
+				
+				plg.pmmiHover[0].src = 'http://planets.nu/_library/2014/10/neuthov2mid.png';
+				plg.pmmiHover[1].src = 'http://planets.nu/_library/2014/10/durhov2mid.png';
+				plg.pmmiHover[2].src = 'http://planets.nu/_library/2014/10/trithov2mid.png';
+				plg.pmmiHover[3].src = 'http://planets.nu/_library/2014/10/molyhov2mid.png';
+				plg.pmmiHover[4].src = 'http://planets.nu/_library/2014/10/planethov2mid.jpg';
+				plg.pmmiHover[5].src = 'http://planets.nu/_library/2014/10/fhovmid.jpg';
+				plg.pmmiHover[6].src = 'http://planets.nu/_library/2014/10/colpichov2mid.jpg';
+				plg.pmmiHover[7].src = 'http://planets.nu/_library/2014/10/natpichov2mid.jpg';
+				plg.pmmiHover[8].src = 'http://planets.nu/_library/2014/10/colhov2mid.png';
+				plg.pmmiHover[9].src = 'http://planets.nu/_library/2014/10/neuthov2mid.png';
+				plg.pmmiHover[10].src = 'http://planets.nu/_library/2014/10/suphov2mid.png';
+				plg.pmmiHover[11].src = 'http://planets.nu/_library/2014/10/mchov2mid.png';
+				plg.pmmiHover[12].src = 'http://planets.nu/_library/2014/10/sbtechhov2mid.jpg';
+				plg.pmmiHover[13].src = 'http://planets.nu/_library/2014/10/facthov2mid.jpg';
+				plg.pmmiHover[14].src = 'http://planets.nu/_library/2014/10/minehov2mid.jpg';
+				plg.pmmiHover[15].src = 'http://planets.nu/_library/2014/10/defhov2mid.jpg';
+				plg.pmmiHover[16].src = 'http://planets.nu/_library/2014/10/sbbuildhov2mid.jpg';
+				plg.pmmiHover[17].src = 'http://planets.nu/_library/2014/10/sbhov2mid.jpg';
+				//plg.pmmiHover[18].src = 'http://i1371.photobucket.com/albums/ag292/rhansen00/NeutHov2Mid_zps14c1798b.png';
+				
+                plg.pmmBtns[0] = '#PMMapBtnBarNeut';
+                plg.pmmBtns[1] = '#PMMapBtnBarDur';
+                plg.pmmBtns[2] = '#PMMapBtnBarTrit';
+                plg.pmmBtns[3] = '#PMMapBtnBarMoly';
+                plg.pmmBtns[4] = '#PMMapBtnBarName';
+                plg.pmmBtns[5] = '#PMMapBtnBarTemp';
+                plg.pmmBtns[6] = '#PMMapBtnBarCols';
+                plg.pmmBtns[7] = '#PMMapBtnBarNats';
+                plg.pmmBtns[8] = '#PMMapBtnBarColTax';
+                plg.pmmBtns[9] = '#PMMapBtnBarNatTax';
+                plg.pmmBtns[10] = '#PMMapBtnBarSup';
+                plg.pmmBtns[11] = '#PMMapBtnBarMC';
+                plg.pmmBtns[12] = '#PMMapBtnBarBM';
+                plg.pmmBtns[13] = '#PMMapBtnBarFact';
+                plg.pmmBtns[14] = '#PMMapBtnBarMines';
+                plg.pmmBtns[15] = '#PMMapBtnBarDP';
+                plg.pmmBtns[16] = '#PMMapBtnBarSBBuild';
+                plg.pmmBtns[17] = '#PMMapBtnBarSBTech';
+                //plg.pmmBtns[18] = '#PMMapBtnBarSBDef';
+                
                 if (debug) console.log("END PROCESS LOAD");
             },	
         
@@ -297,6 +462,8 @@ padding-left: 20px;}");
 				console.log(pln);
 				console.log("pln.id, pln.name: " + pln.id + ", "+ pln.name);
 				*/ 
+				$('#PMMapBtnBar').remove();
+				$('#PMMapDrawBar').remove();
             },
         
         /*
@@ -331,16 +498,876 @@ padding-left: 20px;}");
 			 * showmap: executed when switching from dashboard to starmap
 			 */
         showmap: function() {
-            //console.log("ShowMap: plManagerPlugin plugin called.");
+            console.log("ShowMap: plManagerPlugin plugin called.");
+            
+            vgap.plugins["plManagerPlugin"].displayPMMapMenu();
+			
         },
         
+        displayPMMapMenu: function() {
+			$('#PMMapBtnBar').remove();
+			var plg = vgap.plugins["plManagerPlugin"];
+			
+			var mapmenuhtml = ""
+            mapmenuhtml += '<div id="PMMapBtnBar">Overlays';
+            mapmenuhtml += '<hr />General<span class="PMMapBtn" id="PMMapBtnBarName"><img title="Planet Names" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[4].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarTemp"><img title="Friendly Codes" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[5].src + '"></img></span>';
+            mapmenuhtml += '<hr />Minerals<span class="PMMapBtn" id="PMMapBtnBarNeut"><img title="Neutronium" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[0].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarDur"><img title="Duranium" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[1].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarTrit"><img title="Tritanium" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[2].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarMoly"><img title="Molybdenum" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[3].src + '"></img></span>';
+            mapmenuhtml += '<hr />Population<span class="PMMapBtn" id="PMMapBtnBarCols"><img title="Colonists" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[6].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarNats"><img title="Natives" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[7].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarColTax"><img title="Colonist Tax" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[8].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarNatTax"><img title="Native Tax" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[9].src + '"></img></span>';
+            mapmenuhtml += '<hr />Sup-MC<span class="PMMapBtn" id="PMMapBtnBarSup"><img title="Supplies" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[10].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarMC"><img title="Megacredits" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[11].src + '"></img></span>';
+            mapmenuhtml += '<hr />Structures<span class="PMMapBtn" id="PMMapBtnBarBM"><img title="Build Method" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[12].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarFact"><img title="Factories" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[13].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarMines"><img title="Mines" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[14].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarDP"><img title="Defense Posts" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[15].src + '"></img></span>';
+            mapmenuhtml += '<hr />Starbase<span class="PMMapBtn" id="PMMapBtnBarSBBuild"><img title="SB Building" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[16].src + '"></img></span>';
+            mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarSBTech"><img title="SB Tech and Defense" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[17].src + '"></img></span>';
+            //mapmenuhtml += '<span class="PMMapBtn" id="PMMapBtnBarSBDef"><img title="Defense Posts" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[2].src + '"></img></span>';
+            mapmenuhtml += '<hr /></div>';
+       
+            
+            //$("<div id='PMMapBtnBar'>Some Menu Stuff Beta </div>").appendTo(vgap.container);
+            $(mapmenuhtml).appendTo(vgap.container);
+            
+			$('#PMMapBtnBarNeut').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(0),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(0));
+			$('#PMMapBtnBarDur').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(1),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(1));
+			$('#PMMapBtnBarTrit').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(2),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(2));
+			$('#PMMapBtnBarMoly').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(3),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(3));
+			$('#PMMapBtnBarName').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(4),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(4));
+			$('#PMMapBtnBarTemp').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(5),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(5));
+			$('#PMMapBtnBarCols').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(6),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(6));
+			$('#PMMapBtnBarNats').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(7),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(7));
+			$('#PMMapBtnBarColTax').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(8),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(8));
+			$('#PMMapBtnBarNatTax').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(9),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(9));
+			$('#PMMapBtnBarSup').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(10),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(10));
+			$('#PMMapBtnBarMC').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(11),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(11));
+			$('#PMMapBtnBarBM').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(12),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(12));
+			$('#PMMapBtnBarFact').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(13),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(13));
+			$('#PMMapBtnBarMines').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(14),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(14));
+			$('#PMMapBtnBarDP').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(15),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(15));
+			$('#PMMapBtnBarSBBuild').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(16),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(16));
+			$('#PMMapBtnBarSBTech').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(17),
+										vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(17));
+			//$('#PMMapBtnBarSBDef').hover(vgap.plugins["plManagerPlugin"].makePMMapBtnHovOnFunc(18),
+			//							vgap.plugins["plManagerPlugin"].makePMMapBtnHovOffFunc(18));
+										
+			$('#PMMapBtnBarNeut').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(0));
+			$('#PMMapBtnBarDur').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(1));
+			$('#PMMapBtnBarTrit').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(2));
+			$('#PMMapBtnBarMoly').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(3));
+			$('#PMMapBtnBarName').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(4));
+			$('#PMMapBtnBarTemp').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(5));
+			$('#PMMapBtnBarCols').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(6));
+			$('#PMMapBtnBarNats').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(7));
+			$('#PMMapBtnBarColTax').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(8));
+			$('#PMMapBtnBarNatTax').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(9));
+			$('#PMMapBtnBarSup').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(10));
+			$('#PMMapBtnBarMC').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(11));
+			$('#PMMapBtnBarBM').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(12));
+			$('#PMMapBtnBarFact').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(13));
+			$('#PMMapBtnBarMines').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(14));
+			$('#PMMapBtnBarDP').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(15));
+			$('#PMMapBtnBarSBBuild').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(16));
+			$('#PMMapBtnBarSBTech').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(17));
+			//$('#PMMapBtnBarSBDef').click(vgap.plugins["plManagerPlugin"].makePMMapBtnClickFunc(18));
+			
+			/*
+			 * Code to animate in the map draw functions; saving for a future release
+			$('#PMMapBtnBarNats').click(function() {
+				vgap.hotkeysOn = false;
+				$('#PlanetsLoc').animate(
+					{
+						// 68 planetloc, 52 width on mapbtn, 6px on right; new menu 26px, lets give 4 px buffer
+						right:'98px'
+					},400);
+				$('#PMMapBtnBar').animate(
+					{
+						// 68 planetloc, 52 width on mapbtn, 6px on right; new menu 26px, lets give 4 px buffer
+						right:'36px'
+					},400);
+				$('#PMMapDrawBar').animate(
+					{
+						right:'6px'
+					},400);
+				});
+			*/
+			
+			var mapdrawmenuhtml = ""
+            mapdrawmenuhtml += '<div id="PMMapDrawBar">Draw';
+            mapdrawmenuhtml += '<hr />General<span class="PMDrawBtn" id="PMMapBtnBarName"><img title="Planet Names" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[0].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMDrawBtn" id="PMDrawBtnSelect"><img title="Select" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[2].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMDrawBtn" id="PMDrawBtnMove"><img title="Move" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[0].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMDrawBtn" id="PMDrawBtnCircle"><img title="Circle" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[1].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMDrawBtn" id="PMDrawBtnRect"><img title="Rectangle" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[2].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMDrawBtn" id="PMDrawBtnArrow"><img title="Arrow" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[3].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMMapBtn" id="PMDrawBtnTarget"><img title="Target" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[0].src + '"></img></span>';
+            mapdrawmenuhtml += '<span class="PMDrawBtn" id="PMDrawBtnLine"><img title="Line" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[2].src + '"></img></span>';
+            mapdrawmenuhtml += '<hr /><hr /><span class="PMDrawBtn" id="PMDrawBtnDone"><img title="Done" src="' + vgap.plugins["plManagerPlugin"].pmmiNormal[2].src + '"></img></span>';
+            mapdrawmenuhtml += '<hr /></div>';
+            
+            $(mapdrawmenuhtml).appendTo(vgap.container);
+            
+            $('#PMDrawBtnDone').click(function() {
+				vgap.hotkeysOn = false;
+				$('#PlanetsLoc').animate(
+					{
+						// 68 planetloc, 52 width on mapbtn, 6px on right; new menu 26px, lets give 4 px buffer
+						right:'68px'
+					},400);
+				$('#PMMapBtnBar').animate(
+					{
+						// 68 planetloc, 52 width on mapbtn, 6px on right; new menu 26px, lets give 4 px buffer
+						right:'6px'
+					},400);
+				$('#PMMapDrawBar').animate(
+					{
+						right:'-28px'
+					},400);
+				});
+				
+			$('#PMDrawBtnLine').click(function() {
+				console.log("Line button clicked");
+				var start_mouse = {x: 0, y: 0};
+				vgap.map.canvas.addEventListener('mousedown', function(e) {
+					vgap.map.canvas.addEventListener('mousemove', plg.PMonPaint, false);
+ 
+					mouse.x = typeof e.offsetX !== 'undefined' ? e.offsetX : e.layerX;
+					mouse.y = typeof e.offsetY !== 'undefined' ? e.offsetY : e.layerY;
+ 
+					start_mouse.x = mouse.x;
+					start_mouse.y = mouse.y;
+ 
+					plg.PMonPaint();
+				}, false);
+          
+			});
+		},
+		
+		PMonPaint: function() {
+			// Tmp canvas is always cleared up before drawing.
+			console.log('Onpaint called.');
+				var oldctx = vgap.map.ctx
+				var ctx = vgap.map.ctx;
+				ctx.lineWidth = 5;
+				ctx.lineJoin = 'round';
+				ctx.lineCap = 'round';
+				ctx.strokeStyle = 'blue';
+				//ctx.clearRect(0, 0, tmp_canvas.width, tmp_canvas.height);
+			 
+				ctx.beginPath();
+				ctx.moveTo(start_mouse.x, start_mouse.y);
+				ctx.lineTo(mouse.x, mouse.y);
+				ctx.stroke();
+				ctx.closePath();
+				
+				vgap.map.ctx = oldctx;
+		},
+		
+		
+        makePMMapBtnHovOnFunc: function(overlaypos) {
+			function hovonfunc() {
+				vgap.plugins["plManagerPlugin"].saveAndClearOverlay();
+                vgap.plugins["plManagerPlugin"].pmmcOverlay[overlaypos] = true;
+                $("img", this).attr('src', vgap.plugins["plManagerPlugin"].pmmiHover[overlaypos].src);
+                vgap.map.draw();
+			}
+			return hovonfunc;
+		},
+		
+		makePMMapBtnHovOffFunc: function(overlaypos) {
+			function hovofffunc() {
+				vgap.plugins["plManagerPlugin"].restoreOverlay();
+				if (!vgap.plugins["plManagerPlugin"].pmmcOverlay[overlaypos]) {
+					$("img", this).attr('src', vgap.plugins["plManagerPlugin"].pmmiNormal[overlaypos].src);
+				}
+				vgap.map.draw();
+			}
+			return hovofffunc;
+		},
+				
+        makePMMapBtnClickFunc: function(overlaypos) {
+			function clickfunc() {
+				setval = !vgap.plugins["plManagerPlugin"].pmmcLastOverlay[overlaypos];
+				vgap.plugins["plManagerPlugin"].saveOverlay();
+				vgap.plugins["plManagerPlugin"].pmmcLastOverlay[overlaypos] = setval;
+				vgap.plugins["plManagerPlugin"].setAllBtnPics();
+			}
+			return clickfunc;
+		},
+		
         /*
 			 * draw: executed on any click or drag on the starmap
 			 */			
         draw: function() {
             //console.log("Draw: plManagerPlugin plugin called.");
+            if (vgap.plugins["plManagerPlugin"].pmmOvAct) {
+				//vgap.plugins["plManagerPlugin"].displayPMMapMenu();
+				vgap.plugins["plManagerPlugin"].mpdraw_overlay();
+			}
+            
         },		
         
+        // Draw functions here
+        mpdraw_overlay: function() {
+			oldctx = vgap.map.ctx
+            oldfill = vgap.map.ctx.fillStyle;
+            oldfont = vgap.map.ctx.font;
+            var plg = vgap.plugins["plManagerPlugin"];
+            
+            for (var i = 0; i < vgap.planets.length; i++) {
+				var planet = vgap.planets[i];
+				
+				var startx = 0
+				var starty = 0
+				
+				//console.log("Old Font: " + oldfont);
+				if (vgap.map.isVisible(planet.x, planet.y, vgap.map.planetRad(planet)) && planet.molybdenum > -1) {
+					//console.log("Planet Visible: " + planet.name)
+					//var left = vgap.map.screenX(planet.x); // + 10;
+					//var top = vgap.map.screenY(planet.y); // - 15;
+					//$("<div class='PMMapPlanetSup' style='left:" + left + "px;top:" + top + "px;'>" + planet.id + ": " + planet.supplies + "</div>").appendTo(vgap.map.container);
+					ctx = vgap.map.ctx;
+					ctx.fillStyle = "white";
+					//console.log("ZOOM: " + vgap.map.zoom);
+					txtsize = Math.min(Math.round(vgap.map.zoom*9.3),20)
+					
+					ctx.font = "bold " + txtsize + "px Arial";
+					var fillstr = "";
+					//console.log("Looking for fillstr: pmmNeut = " + plg.pmmNeut);
+					/*
+					function texter(str, x, y){
+    for(var i = 0; i <= str.length; ++i){
+        var ch = str.charAt(i);
+        ctx.fillStyle = randomColor();
+        ctx.fillText(ch, x, y);
+        x += ctx.measureText(ch).width;
+    }
+    * 
+    * 
+    * reshtml += "<tr><td class='ResName' align='right'>Dur</td>";
+                            reshtml += "<td class='ResSfc' align='right' style='color: " + vgap.plugins["plManagerPlugin"].getMineralSfcColor(planet.duranium) + "; padding-left=0.5ex'>" + planet.duranium + "&nbsp;" + "</td>";
+                            reshtml += "<td class='ResGrd' align='left' style='color: " + vgap.plugins["plManagerPlugin"].getMineralGrdColor(planet.groundduranium) + ";'><b> /&nbsp;" + planet.groundduranium + "</b></td>";
+                            reshtml += "<td class='ResDen' style='color: " + vgap.plugins["plManagerPlugin"].getMineralDenColor(planet.densityduranium) + ";'>" + planet.densityduranium + "%</td>";
+                            reshtml += "<td class='ResAmt'>" + vgap.plugins["plManagerPlugin"].miningAmtPerTurn(planet, planet.groundduranium, planet.densityduranium) + "</td></tr>";
+    */
+					
+					if (plg.pmmcOverlay[0]) {
+						fillstr = planet.id + ": " + planet.neutronium + " / " + planet.groundneutronium + " (" + planet.densityneutronium + "%)";
+					}
+					else if (plg.pmmcOverlay[1]) {
+						fillstr = planet.id + ": " + planet.duranium + " / " + planet.groundduranium + " (" + planet.densityduranium + "%)";
+					}
+					else if (plg.pmmcOverlay[2]) {
+						fillstr = planet.id + ": " + planet.tritanium + " / " + planet.groundtritanium + " (" + planet.densitytritanium + "%)";
+					}
+					else if (plg.pmmcOverlay[3]) {
+						fillstr = planet.id + ": " + planet.molybdenum + " / " + planet.groundmolybdenum + " (" + planet.densitymolybdenum + "%)";
+					}
+					//fillstr = planet.id + ": " + planet.molybdenum + "/" + planet.groundmolybdenum + " (" + planet.densitymolybdenum + "%)";
+					//fillstr = planet.id + ": (" + planet.x + "," + planet.y + ")";
+					else if (plg.pmmcOverlay[4]) {
+						fillstr = planet.id + ": " + planet.name + " (" + planet.temp + ")";
+					}
+					
+					else if (plg.pmmcOverlay[5]) {
+						fillstr = planet.id + ": " + planet.temp;
+					}
+					
+					else if (plg.pmmcOverlay[6]) {
+						// Colonist overlay
+						fillstr = planet.id + ": " + plg.nwc(planet.clans) + " / " + plg.nwc(plg.getMaxColonists(planet,false)) + " (" + plg.nwc(plg.myColPopGrowth(planet,false)) + ")";
+					}
+					
+					else if (plg.pmmcOverlay[7]) {
+						// Native overlay
+						if (planet.nativeclans > 0) {
+							fillstr = planet.id + ": " + planet.nativeracename.substring(0,3).toUpperCase() + " [" + planet.nativetaxvalue + "%] " + plg.nwc(planet.nativeclans) + " / " + plg.nwc(plg.getMaxNatives(planet,false)) + " (" + plg.nwc(plg.myNatPopGrowth(planet,false)) + ")";
+						}
+						else {
+							fillstr = "";
+						}
+					}
+					
+					else if (plg.pmmcOverlay[8]) {
+						// Colonist Tax overlay
+						
+						var methodindex = plg.ctarray[planet.id];
+						var methodname = "Manual";
+						if (methodindex != 'm')
+                                methodname = plg.taxmethods[methodindex].name;
+						fillstr = planet.id + ": " + methodname + " - " + planet.colonisttaxrate + "% - " + planet.colonisthappypoints.toString().trim() + " " + plg.happyChgTxt(vgap.colonistTaxChange(planet)) + " " + plg.colTaxAmtTxt(planet);
+					}
+					
+					else if (plg.pmmcOverlay[9]) {
+						// Native Tax overlay
+						if (planet.nativeclans > 0) {
+							var methodindex = plg.ntarray[planet.id];
+							var methodname = "Manual";
+							if (methodindex != 'm')
+								methodname = plg.taxmethods[methodindex].name;
+							fillstr = planet.id + ": " + methodname + " - " + planet.nativetaxrate + "% - " + planet.nativehappypoints.toString().trim() + " " + plg.happyChgTxt(vgap.nativeTaxChange(planet)) + " " + plg.natTaxAmtTxt(planet);
+						}
+						else {
+							fillstr = "";
+						}
+					}
+					
+					else if (plg.pmmcOverlay[10]) {
+						// Supplies
+						if (planet.supplies >= 0) {
+							fillstr = planet.id + ": Supplies: " + planet.supplies + " [" + (planet.supplies+planet.megacredits) + "]";
+						}
+						else {
+							fillstr = "";
+						}
+					}
+					
+					else if (plg.pmmcOverlay[11]) {
+						// Megacredits
+						if (planet.megacredits >= 0) {
+							fillstr = planet.id + ": MC: " + planet.megacredits + " [" + (planet.supplies+planet.megacredits) + "]";
+						}
+						else {
+							fillstr = "";
+						}
+					}
+					else if (plg.pmmcOverlay[12]) {	
+						// Build Method
+						var methodindex = plg.bmarray[planet.id];
+						var methodname = "Manual";
+						if (methodindex != 'm')
+                                methodname = plg.buildmethods[methodindex][0];
+						
+						fillstr = planet.id + ": " + methodname + " [F: (+" + planet.builtfactories + ") M: (+" + planet.builtmines + ") D: (+" + planet.builtdefense + ")]";
+					}
+					
+					else if (plg.pmmcOverlay[13]) {
+						// Factories
+						fillstr = planet.id + ": Factories - " + planet.factories + "/" + plg.maxBldgs(planet,100) + " [+" + planet.builtfactories + "]";
+					}
+					
+					else if (plg.pmmcOverlay[14]) {
+						// Mines
+						fillstr = planet.id + ": Mines - " + planet.mines + "/" + plg.maxBldgs(planet,200) + " [+" + planet.builtmines + "]";
+					}
+					
+					else if (plg.pmmcOverlay[15]) {
+						// Defense
+						fillstr = planet.id + ": Defense - " + planet.defense + "/" + plg.maxBldgs(planet,50) + " [+" + planet.builtdefense + "]";
+					}
+					
+					else if (plg.pmmcOverlay[16]) {
+						// SB Building
+						var starbase = vgap.getStarbase(planet.id);
+						if (starbase != null) {
+							if (starbase.isbuilding) {
+								fillstr = planet.id + ": " + planet.friendlycode + " " + vgap.getHull(starbase.buildhullid).name + " - " + starbase.buildengineid + "/" + starbase.buildbeamid + "/" + starbase.buildtorpedoid;
+							}
+							else {
+								// The starbase isn't building anything
+								fillstr = planet.id + ": None";
+							}
+						}
+						else {
+							fillstr = "";
+						}
+					}
+					
+					else if (plg.pmmcOverlay[17]) {
+						// SB Tech Levels
+						var starbase = vgap.getStarbase(planet.id);
+						if (starbase != null) {
+							fillstr = planet.id + ": " + starbase.hulltechlevel + "/" + starbase.enginetechlevel + "/" + starbase.beamtechlevel + "/" + starbase.torptechlevel + " " + starbase.defense + "/" + starbase.fighters + "/" + starbase.damage;
+						}
+						else {
+							fillstr = "";
+						}
+					}
+					
+					
+					else {
+						fillstr = planet.id + ": (" + planet.name + ")";
+					}
+					text_width = ctx.measureText(fillstr).width;
+					// Check if the string is going to overlap a planet
+					fliptext = false;
+					for (var j = 0; j < vgap.planets.length; j++) {
+						if ((vgap.map.isVisible(vgap.planets[j].x, vgap.planets[j].y, vgap.map.planetRad(vgap.planets[j]))) &&
+							(vgap.map.screenY(vgap.planets[j].y) < vgap.map.screenY(planet.y) + txtsize) && 
+							(vgap.map.screenY(vgap.planets[j].y) > vgap.map.screenY(planet.y) - txtsize) &&
+							(vgap.map.screenX(vgap.planets[j].x) > vgap.map.screenX(planet.x)) &&
+							(vgap.map.screenX(vgap.planets[j].x) < vgap.map.screenX(planet.x) + text_width)) {
+								//console.log("Flipping id " + planet.id + " due to " + vgap.planets[j].id);
+								fliptext = true;
+								
+						//if ((vgap.planets[j].y < planet.y + txtsize) && (vgap.planets[j].y < planet.y - txtsize)) {
+						//	if ((vgap.planets[j].x > planet.x) && vgap.planets[j].x < planet.x + 15 + text_width) {
+								// The text is going to overlap a planet.  Flip it to the other side.
+						//		fliptext = true;
+						//	}
+						//}
+						}
+					}
+					if (fliptext == false) {
+						//ctx.fillText(fillstr, vgap.map.screenX(planet.x)+(3*vgap.map.planetRad(planet)/2), vgap.map.screenY(planet.y)+vgap.map.planetRad(planet)/2);
+						startx = vgap.map.screenX(planet.x)+(3*vgap.map.planetRad(planet)/2);
+						starty = vgap.map.screenY(planet.y)+vgap.map.planetRad(planet)/2; 
+					}
+					else {
+						// Flip text is true.  If we did a flip, lets check for persistent overlap due to planets being right next to one another
+						var yoff = 0
+						for (var j = 0; j < vgap.planets.length; j++) {
+							if ((vgap.map.isVisible(vgap.planets[j].x, vgap.planets[j].y, vgap.map.planetRad(vgap.planets[j]))) &&
+								(vgap.map.screenY(vgap.planets[j].y) < vgap.map.screenY(planet.y) + txtsize) && 
+								(vgap.map.screenY(vgap.planets[j].y) > vgap.map.screenY(planet.y) - txtsize) &&
+								(vgap.map.screenX(vgap.planets[j].x) < vgap.map.screenX(planet.x)) &&
+								(vgap.map.screenX(vgap.planets[j].x) > vgap.map.screenX(planet.x) - text_width)) {
+								// A collision.  Determine if we should scoot the text up or scoot it down:
+								//console.log("Applying yoffset for " + planet.id + " due to " + vgap.planets[j].id);
+								if (vgap.map.screenY(vgap.planets[j].y) < vgap.map.screenY(planet.y)) {
+									// The other planet is below us.  Scoot up:
+									yoff = txtsize/2;
+								}
+								else {
+									yoff = -txtsize/2;
+								}
+								//console.log("Applying yoffset for " + planet.id + " due to " + vgap.planets[j].id + ": yoff = " + yoff);
+							}
+						}
+						//ctx.fillText(fillstr, vgap.map.screenX(planet.x)-(3*vgap.map.planetRad(planet)/2)-text_width, vgap.map.screenY(planet.y)+yoff+vgap.map.planetRad(planet)/2 );
+						startx = vgap.map.screenX(planet.x)-(3*vgap.map.planetRad(planet)/2)-text_width;
+						starty = vgap.map.screenY(planet.y)+yoff+vgap.map.planetRad(planet)/2; 
+					}
+				}
+				
+				// Execute text fill
+				if (plg.pmmcOverlay[0]) {
+					plg.mp_mineraltextfill(ctx,planet.id,planet.neutronium,planet.groundneutronium,planet.densityneutronium,startx,starty)
+				}
+				else if (plg.pmmcOverlay[1]) {
+					plg.mp_mineraltextfill(ctx,planet.id,planet.duranium,planet.groundduranium,planet.densityduranium,startx,starty)
+				}
+				else if (plg.pmmcOverlay[2]) {
+					plg.mp_mineraltextfill(ctx,planet.id,planet.tritanium,planet.groundtritanium,planet.densitytritanium,startx,starty)
+				}
+				else if (plg.pmmcOverlay[3]) {
+					plg.mp_mineraltextfill(ctx,planet.id,planet.molybdenum,planet.groundmolybdenum,planet.densitymolybdenum,startx,starty)
+				}
+				else if (plg.pmmcOverlay[4]) {
+					//ctx.fillText(fillstr, startx, starty);
+					ctx.fillText(planet.id + ": ", startx, starty);
+					startx += ctx.measureText(planet.id + ": ").width;
+					
+					ctx.fillText(planet.name, startx, starty);
+					startx += ctx.measureText(planet.name).width;
+					
+					rchan = 0;
+					gchan = 0;
+					bchan = 0;
+					
+					if (planet.temp <= 50) rchan = 0
+					else rchan = Math.round((((planet.temp - 50) / 50) * 255));
+					
+					if (planet.temp <= 50) gchan = Math.round((((planet.temp) / 50) * 255));
+					else gchan = Math.round(255 - (((planet.temp - 50) / 50) * 255));
+					
+					if (planet.temp >= 50) bchan = 0
+					else bchan = Math.round(255 - (((planet.temp) / 50) * 255));
+					
+					ctx.fillStyle = "rgba("+rchan+","+gchan+","+bchan+",1)";
+					 
+					ctx.fillText(" (" + planet.temp + ")", startx,starty);
+				}
+				else if (plg.pmmcOverlay[5]) {
+					ctx.fillText(planet.id + ": ", startx, starty);
+			
+					startx += ctx.measureText(planet.id + ": ").width;
+					fcu = planet.friendlycode.toUpperCase();
+							if (fcu == "NUK" || fcu == "ATT") ctx.fillStyle = "red";
+							else if (fcu == "BUM") ctx.fillStyle = "orchid";
+							else if (fcu == "DMP") ctx.fillStyle = "magenta";
+							else if (fcu.substr(0, 2) == "PB") ctx.fillStyle = "aqua";
+							
+							ctx.fillText(planet.friendlycode + " ", startx, starty);
+				}
+				else if (plg.pmmcOverlay[6]) {
+					plg.mp_clantextfill(ctx,planet.id,planet.clans,plg.getMaxColonists(planet,false),plg.myColPopGrowth(planet,false), startx,starty)
+				}
+				
+				else if (plg.pmmcOverlay[7]) {
+					if (planet.nativeclans > 0) {
+						plg.mp_natclantextfill(ctx,planet.id,planet.nativeracename.substring(0,3).toUpperCase(),planet.nativetaxvalue,planet.nativeclans,plg.getMaxNatives(planet,false),plg.myNatPopGrowth(planet,false), startx,starty)
+					}
+				}
+				else if (plg.pmmcOverlay[8]) {
+					var methodindex = plg.ctarray[planet.id];
+					var methodname = "Manual";
+					if (methodindex != 'm') {
+						methodname = plg.taxmethods[methodindex].name;
+					}
+					
+					plg.mp_coltaxmethtextfill(ctx,planet.id,methodname, planet.colonisttaxrate, planet.colonisthappypoints, plg.happyChgTxt(vgap.colonistTaxChange(planet)), plg.colTaxAmtTxt(planet),  startx,starty)
+				}
+				
+				else if (plg.pmmcOverlay[9]) {
+					if (planet.nativeclans > 0) {
+						var methodindex = plg.ntarray[planet.id];
+						var methodname = "Manual";
+						if (methodindex != 'm') {
+							methodname = plg.taxmethods[methodindex].name;
+						}
+					
+						plg.mp_coltaxmethtextfill(ctx,planet.id,methodname, planet.nativetaxrate, planet.nativehappypoints, plg.happyChgTxt(vgap.nativeTaxChange(planet)), plg.natTaxAmtTxt(planet),  startx,starty)
+					}
+				}
+				else if (plg.pmmcOverlay[10]) {
+					// Supplies
+					if (planet.supplies >= 0) {
+						ctx.fillText(planet.id + ": Supplies: ", startx, starty);
+						startx += ctx.measureText(planet.id + ": Supplies: ").width;
+						
+						rchan = 0;
+						gchan = 255;
+						bchan = 0;
+						
+						rchan = Math.round(255-((planet.supplies / 1500) * 255));
+						gchan = Math.round(127+Math.min((planet.supplies / 1500) * 128),128);
+						
+						
+						ctx.fillStyle = "rgba("+rchan+","+gchan+","+bchan+",1)";
+						 
+						ctx.fillText(planet.supplies, startx,starty);
+						startx += ctx.measureText(planet.supplies).width;
+						
+						rchan = Math.round(255-(((planet.supplies+planet.megacredits) / 1500) * 255));
+						gchan = Math.round(127+Math.min(((planet.supplies+planet.megacredits) / 1500) * 128),128);
+						ctx.fillStyle = "rgba("+rchan+","+gchan+","+bchan+",1)";
+						 
+						ctx.fillText(" [" + (planet.supplies+planet.megacredits) + "]", startx,starty);
+					}
+				}
+				
+				else if (plg.pmmcOverlay[11]) {
+					// Megacredits
+					if (planet.megacredits >= 0) {
+						ctx.fillText(planet.id + ": Megacredits: ", startx, starty);
+						startx += ctx.measureText(planet.id + ": Megacredits: ").width;
+						
+						rchan = 0;
+						gchan = 255;
+						bchan = 0;
+						
+						rchan = Math.round(255-((planet.megacredits / 1500) * 255));
+						gchan = Math.round(127+Math.min((planet.megacredits / 1500) * 128),128);
+						
+						
+						ctx.fillStyle = "rgba("+rchan+","+gchan+","+bchan+",1)";
+						 
+						ctx.fillText(planet.megacredits, startx,starty);
+						startx += ctx.measureText(planet.megacredits).width;
+						
+						rchan = Math.round(255-(((planet.supplies+planet.megacredits) / 1500) * 255));
+						gchan = Math.round(127+Math.min(((planet.supplies+planet.megacredits) / 1500) * 128),128);
+						ctx.fillStyle = "rgba("+rchan+","+gchan+","+bchan+",1)";
+						 
+						ctx.fillText(" [" + (planet.supplies+planet.megacredits) + "]", startx,starty);
+					}
+				}
+				
+				else if (plg.pmmcOverlay[12]) {
+					// Build Method
+					ctx.fillText(fillstr, startx, starty);
+				}
+				
+				else if (plg.pmmcOverlay[13]) {
+					// Factories
+					plg.mp_structtextfill(ctx,planet.id,"Factories",planet.factories,plg.maxBldgs(planet,100), planet.builtfactories,startx,starty)
+				}
+				
+				else if (plg.pmmcOverlay[14]) {
+					// Mines
+					plg.mp_structtextfill(ctx,planet.id,"Mines",planet.mines,plg.maxBldgs(planet,200), planet.builtmines,startx,starty)
+				}
+				
+				else if (plg.pmmcOverlay[15]) {
+					// Defense
+					plg.mp_structtextfill(ctx,planet.id,"Defense",planet.defense,plg.maxBldgs(planet,50), planet.builtdefense,startx,starty)
+				}
+				
+				else if (plg.pmmcOverlay[16]) {
+					// Starbase Build
+					//ctx.fillText(fillstr, startx, starty);
+					
+					var starbase = vgap.getStarbase(planet.id);
+					if (starbase != null) {
+						ctx.fillText(planet.id + ": ", startx, starty);
+						startx += ctx.measureText(planet.id + ": ").width;
+						
+						if (starbase.isbuilding) {
+							fcu = planet.friendlycode.toUpperCase();
+							if (fcu == "NUK" || fcu == "ATT") ctx.fillStyle = "red";
+							else if (fcu == "BUM") ctx.fillStyle = "orchid";
+							else if (fcu == "DMP") ctx.fillStyle = "magenta";
+							else if (fcu.substr(0, 2) == "PB") ctx.fillStyle = "aqua";
+							
+							ctx.fillText(planet.friendlycode + " ", startx, starty);
+							startx += ctx.measureText(planet.friendlycode + " ").width;
+							
+							ctx.fillStyle = "#00FF00";
+							//fillstr = planet.id + ": " + vgap.getHull(starbase.buildhullid).name + " - " + starbase.buildengineid + "/" + starbase.buildbeamid + "/" + starbase.buildtorpedoid;
+							ctx.fillText(vgap.getHull(starbase.buildhullid).name, startx, starty);
+							startx += ctx.measureText(vgap.getHull(starbase.buildhullid).name).width;
+							
+							ctx.fillStyle = "#FFFFFF";
+							ctx.fillText(" - " + starbase.buildengineid + "/" + starbase.buildbeamid + "/" + starbase.buildtorpedoid, startx, starty);
+						}
+						else {
+							ctx.fillStyle = "#F62817";
+							ctx.fillText("None", startx, starty);
+						}
+					}
+				}
+				
+				else if (plg.pmmcOverlay[17]) {
+					// Starbase Tech and Defense
+					ctx.fillText(fillstr, startx, starty);
+				}
+				
+				else {
+					fillstr = planet.id + ": (" + planet.name + ")";
+				}
+				
+				//ctx.fillText(fillstr, startx, starty);
+			}
+			vgap.map.ctx = oldctx;
+			vgap.map.ctx.fillStyle = oldfill;
+			vgap.map.ctx.font = oldfont;
+			
+		},
+        
+        mp_mineraltextfill: function(ctx,id,surface,ground,density,x,y) {
+			
+			var plg = vgap.plugins["plManagerPlugin"];
+			ctx.fillText(id + ": ", x, y);
+			
+			x += ctx.measureText(id + ": ").width;
+			ctx.fillStyle = plg.getMineralSfcColor(surface);
+			ctx.fillText(surface, x,y); 
+			
+			x += ctx.measureText(surface).width;
+			ctx.fillStyle = plg.getMineralGrdColor(ground);
+			ctx.fillText(" / " + ground, x, y);
+			
+			x += ctx.measureText(" / " + ground).width;
+			ctx.fillStyle = plg.getMineralDenColor(density);
+			ctx.fillText(" (" + density + "%)", x, y);
+		},
+		
+		mp_clantextfill: function(ctx,id,clans,maxclans,growthclans,x,y) {
+			
+			var plg = vgap.plugins["plManagerPlugin"];
+			ctx.fillText(id + ": ", x, y);
+			
+			x += ctx.measureText(id + ": ").width;
+			if (growthclans < 0) {
+				ctx.fillStyle = "#F62817"
+			}
+			else if (clans > maxclans) {
+				ctx.fillStyle = "#FF6600"
+			}
+			else {
+				ctx.fillStyle = "#00FF00"
+			}
+			
+			ctx.fillText(plg.nwc(clans), x,y); 
+			
+			x += ctx.measureText(plg.nwc(clans)).width;
+			ctx.fillStyle = "#FFFFFF"
+			ctx.fillText(" / " + plg.nwc(maxclans), x, y);
+			x += ctx.measureText(" / " + plg.nwc(maxclans)).width;
+			ctx.fillText(" (" + plg.nwc(growthclans) + ")", x, y);
+		},
+		
+		mp_natclantextfill: function(ctx,id,natname,nattaxval,clans,maxclans,growthclans,x,y) {
+			
+			var plg = vgap.plugins["plManagerPlugin"];
+			ctx.fillText(id + ": ", x, y);
+			
+			x += ctx.measureText(id + ": ").width;
+			
+			
+			ctx.fillText(natname, x, y);
+			x += ctx.measureText(natname).width;
+			
+			// Calculate the rgb color for the tax value
+			// 20% red, 180% green, through yellow
+			// Red: 255,0,0
+			// Yellow: 255, 255, 0
+			// Green: 0,255,0
+			
+			rchan = 0
+			gchan = 0
+			
+			if (nattaxval <= 100) {
+				rchan = 255;
+			}
+			else {
+				rchan = Math.round(255 - (((nattaxval - 100) / 80) * 255));
+			}
+			
+			if (nattaxval >= 100) {
+				gchan = 255;
+			}
+			else {
+				gchan = Math.round(((nattaxval - 20) / 80) * 255);
+			}
+			//console.log("nattax, rgba: " + nattaxval + " , " + rchan + " , " + gchan);
+			ctx.fillStyle = "rgba("+rchan+","+gchan+",0,1)";
+			
+			ctx.fillText(" [" + nattaxval + "%] ", x, y);
+			x += ctx.measureText(" [" + nattaxval + "%] ").width;
+			
+			if (growthclans < 0) {
+				ctx.fillStyle = "#F62817"
+			}
+			else if (clans > maxclans) {
+				ctx.fillStyle = "#FF6600"
+			}
+			else {
+				ctx.fillStyle = "#00FF00"
+			}
+			ctx.fillText(plg.nwc(clans), x,y); 
+			
+			x += ctx.measureText(plg.nwc(clans)).width;
+			ctx.fillStyle = "#FFFFFF"
+			ctx.fillText(" / " + plg.nwc(maxclans), x, y);
+			x += ctx.measureText(" / " + plg.nwc(maxclans)).width;
+			ctx.fillText(" (" + plg.nwc(growthclans) + ")", x, y);
+		},
+		
+		mp_coltaxmethtextfill: function(ctx,id,methodname,coltaxpct,colhappy,colhappychg,coltaxtxt,x,y) {
+			
+			var plg = vgap.plugins["plManagerPlugin"];
+			ctx.fillText(id + ": ", x, y);
+			
+			x += ctx.measureText(id + ": ").width;
+			
+			ctx.fillText(methodname + " - ", x,y); 
+			x += ctx.measureText(methodname + " - ").width;
+			
+			ctx.fillText(coltaxpct + "% - ", x,y); 
+			x += ctx.measureText(coltaxpct + "% - ").width;
+			
+			
+			if (colhappy < 40) {
+				ctx.fillStyle = "#F62817"
+			}
+			else if (colhappy < 70) {
+				ctx.fillStyle = "#FF6600"
+			}
+			else {
+				ctx.fillStyle = "#00FF00"
+			}
+			
+			ctx.fillText(colhappy.toString().trim() + " ",x,y)
+			x += ctx.measureText(colhappy + " ").width;
+			
+			ctx.fillStyle = "#FFFFFF"
+			ctx.fillText(colhappychg,x,y)
+			x += ctx.measureText(colhappychg).width;
+			ctx.fillStyle = "#D3D3D3"
+			ctx.fillText(" " + coltaxtxt,x,y)
+		},
+		
+		mp_structtextfill: function(ctx,id,strname,struct,maxstruct,builtstruct,x,y) {
+			
+			var plg = vgap.plugins["plManagerPlugin"];
+			ctx.fillText(id + ": ", x, y);
+			
+			x += ctx.measureText(id + ": ").width;
+			
+			ctx.fillText(strname + " - ", x,y); 
+			x += ctx.measureText(strname + " - ").width;
+			
+			if (struct > maxstruct) {
+				ctx.fillStyle = "#F62817"
+			}
+			else {
+				ctx.fillStyle = "#00FF00"
+			}
+			
+			ctx.fillText(struct, x,y); 
+			x += ctx.measureText(struct).width;
+			
+			ctx.fillStyle = "#FFFFFF"
+			ctx.fillText(" / " + maxstruct,x,y)
+			x += ctx.measureText(" / " + maxstruct).width;
+			
+			ctx.fillStyle = "#D3D3D3"
+			ctx.fillText(" [+" + builtstruct + "]",x,y)
+		},
+		
+		saveOverlay: function() {
+			vgap.plugins["plManagerPlugin"].pmmcLastOverlay = vgap.plugins["plManagerPlugin"].pmmcOverlay;
+		},
+		
+		saveAndClearOverlay: function() {
+			vgap.plugins["plManagerPlugin"].pmmcLastOverlay = vgap.plugins["plManagerPlugin"].pmmcOverlay;
+			vgap.plugins["plManagerPlugin"].pmmcOverlay = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false];
+		},
+		
+		clearLastOverlay: function() {
+			vgap.plugins["plManagerPlugin"].pmmcLastOverlay = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false];
+		},
+		
+		setAllBtnPics: function() {
+			var plg = vgap.plugins["plManagerPlugin"];
+			for (var i=0; i<vgap.plugins["plManagerPlugin"].pmmBtns.length; i++) {
+				if (plg.pmmcLastOverlay[i]) {
+					$("img", plg.pmmBtns[i]).attr('src', plg.pmmiHover[i].src);
+				}
+				else {
+					$("img", plg.pmmBtns[i]).attr('src', plg.pmmiNormal[i].src);
+				}
+			}
+		},
+		
+		restoreOverlay: function() {
+			vgap.plugins["plManagerPlugin"].pmmcOverlay = vgap.plugins["plManagerPlugin"].pmmcLastOverlay;
+		},
+		/*
+		mp_clearClickOverlay: function() {
+			vgap.plugins["plManagerPlugin"].pmmcLastOverlay = vgap.plugins["plManagerPlugin"].pmmcOverlay;
+			vgap.plugins["plManagerPlugin"].pmmcOverlay = [false,false,false,false];
+		},
+		
+		mp_restoreClickOverlay: function() {
+			vgap.plugins["plManagerPlugin"].pmmcOverlay = vgap.plugins["plManagerPlugin"].pmmcLastOverlay;
+		},
+		*/
         /*
 			 * loadplanet: executed a planet is selected on dashboard or starmap
 			 */
@@ -348,10 +1375,112 @@ padding-left: 20px;}");
             //console.log("LoadPlanet: plManagerPlugin plugin called.");
             
             //vgap.plugins["plManagerPlugin"].showBldgs();
-            $('<div id="PDBar" class="SepBar"><div id="PDBtn" class="SepButton">Planet Detail</div><div id="PDTitle" class="SepTitle">Planetary Management Plugin</div></div>').insertAfter('#MainFleetContainer');
+            //$('<div id="PDBar" class="SepBar"><div id="PDBtn" class="SepButton">Planet Detail</div><div id="PDTitle" class="SepTitle">Planetary Management Plugin</div></div>').insertAfter('#MainFleetContainer');
+            var plg = vgap.plugins["plManagerPlugin"];
+            var planet = vgap.planetScreen.planet;
+            
+            var bmhtml = "";
+            bmhtml += '<div id="PDBar" class="SepBar"><div id="PDBtn" class="SepButton">Planet Detail</div><div id="PDTitle" class="SepTitle">Planetary Management Plugin</div></div>';
+            
+            bmhtml += "<table id='MPPLBMTable'>";
+                            bmhtml += "<thead></thead>";
+                            bmhtml += "<tr><td>Build Method:</td><td>Colonist Tax:</td><td>Native Tax:</td>";
+                            bmhtml += "<td rowspan = 2 align=center style='width: 45px; cursor:pointer;'><img class='BuildButton' align=center width=45px height=40px src='http://play.planets.nu/img/icons/blacksquares/planets.png'/></td></tr>";
+                            bmhtml += "<tr><td><div> \
+<select class='MPBMSelect' data-plid='" + planet.id + "'> \
+<option value='m'>Manual</option>";
+                            for (var k=0; k < plg.buildmethods.length; k++) {
+                                bmhtml += "<option value='"+k+"'>" + plg.buildmethods[k][0] + "</option>";
+                            }	
+                            bmhtml += "</select></div></td>";		   
+                            bmhtml += "<td><div> \
+<select class='MPCTSelect' data-plid='" + planet.id + "'> \
+<option value='m'>Manual</option>";
+                            for (var k=0; k < plg.taxmethods.length; k++) {
+                                if (plg.taxmethods[k].taxType == 'C' || plg.taxmethods[k].taxType == 'CN')
+                                    bmhtml += "<option value='"+k+"'>" + plg.taxmethods[k].name + "</option>";
+                            }	
+                            bmhtml += "</select></div></td>";
+                            
+                            if (planet.nativeclans > 0)
+                            {
+                                bmhtml += "<td><div> \
+<select class='MPNTSelect' data-plid='" + planet.id + "'> \
+<option value='m'>Manual</option>";
+                                for (var k=0; k < plg.taxmethods.length; k++) {
+                                    if (plg.taxmethods[k].taxType == 'N' || plg.taxmethods[k].taxType == 'CN')
+                                        bmhtml += "<option value='"+k+"'>" + plg.taxmethods[k].name + "</option>";
+                                }	
+                                bmhtml += "</select> \
+</div> \
+</td></tr>";
+                                
+                            }
+                            bmhtml += "</table>";
+             
+            $(bmhtml).insertAfter('#MainFleetContainer');
+            $('.MPBMSelect').each(function() {
+                        $(this).val(plg.bmarray[$(this).attr('data-plid')]);
+                    });                    
+			$('.MPBMSelect').change(function() {
+				plg.bmarray[$(this).attr('data-plid')] = $(this).attr('value');
+				plg.saveObjectAsNote(0, plg.notetype, [plugin_version,plg.bmarray]);
+			});
+			$('.MPCTSelect').each(function() {
+                        $(this).val(plg.ctarray[$(this).attr('data-plid')]);
+                    });
+                    
+			$('.MPCTSelect').change(function() {
+				//console.log("CT CHANGED!");
+				plg.ctarray[$(this).attr('data-plid')] = $(this).attr('value');
+				plg.saveObjectAsNote(2, plg.notetype, [plugin_version,plg.ctarray]);
+			});
+			
+			$('.MPNTSelect').each(function() {
+				$(this).val(plg.ntarray[$(this).attr('data-plid')]);
+			});
+			
+			$('.MPNTSelect').change(function() {
+				//console.log("NT CHANGED!");
+				plg.ntarray[$(this).attr('data-plid')] = $(this).attr('value');
+				plg.saveObjectAsNote(1, plg.notetype, [plugin_version,plg.ntarray]);
+			});
+            $('.BuildButton').click(function() {
+                        //plg.executePlanetUpdate();
+                        // Execute an update of this planet only
+                        
+                        // First, find the proper planetbuildindex
+                        for (var i = 0; i < vgap.myplanets.length; i++)
+                        {
+							if (vgap.myplanets[i]==planet) {
+								plg.planetbuildindex = i;
+								console.log("BUILD INDEX FOUND: " + i);
+							}
+						}
+						
+                        plg.planetBuildBldgs();
+                        // Handle AutoTax check box
+						if (plg.ctarray[planet.id] != 'm' && plg.taxmethods[plg.ctarray[planet.id]].name == "Auto Tax") {
+							planet.colchange = 1;
+							planet.changed = 1;
+							//console.log("Auto taxing on " + planet.name);
+						} else {
+							planet.colchange = 0;
+							planet.changed = 1;
+							vgap.plugins["plManagerPlugin"].planetSetTaxGeneral(false);
+						}
+		        
+						planet.changed = 1;
+						plg.planetbuildindex = 0;
+						vgap.save();
+                        vgap.planetScreen.screen.refresh();
+                    });
+           
             $('#PDBtn').click(function() {
                 vgap.plugins["plManagerPlugin"].showPlanetDetailFromStarmap(vgap.planetScreen.planet.id);
             });
+            vgap.plugins["plManagerPlugin"].displayPMMapMenu();
+            vgap.map.draw();
         },
         
         /*
@@ -359,6 +1488,7 @@ padding-left: 20px;}");
 			 */
         loadstarbase: function() {
             //console.log("LoadStarbase: plManagerPlugin plugin called.");
+            vgap.plugins["plManagerPlugin"].displayPMMapMenu();
         },
         
         /*
@@ -366,6 +1496,7 @@ padding-left: 20px;}");
 			 */
         loadship: function() {
             //console.log("LoadShip: plManagerPlugin plugin called.");
+            vgap.plugins["plManagerPlugin"].displayPMMapMenu();
         },
         
         
@@ -397,6 +1528,34 @@ padding-left: 20px;}");
         parray: [],
         qb: 0,
         fcrandomize: true,
+        overtax: true,
+        
+		// PM Map overlay variables
+		pmmOvAct: true,
+		pmmNeut: false,
+		pmmDur: false,
+		pmmTri: false,
+		pmmMoly: false,
+		pmmcNeut: false,
+		pmmcDur: false,
+		pmmcTri: false,
+		pmmcMoly: false,
+		
+		pmmcOverlay: [],
+		pmmcLastOverlay: [],
+		pmmiNormal: [],
+		pmmiHover: [],
+		pmmBtns: [],
+		
+		// PM Map Image variables
+		pmiNeutN: new Image(),
+		pmiNeutH: new Image(),
+		pmiDurN: new Image(),
+		pmiDurH: new Image(),
+		pmiTriN: new Image(),
+		pmiTriH: new Image(),
+		pmiMolyN: new Image(),
+		pmiMolyH: new Image(),
         
         /* Main Display Function
 			 */
@@ -531,9 +1690,13 @@ padding-left: 20px;}");
                 var mrevhtml = "<table id = 'BMGSelTable'><tr><td colspan=2><b>Build Methods:</b><br /></td></tr>";
                 mrevhtml += "<tr><td rowspan = 2><select name='BMGSelect' id='BMGSelect'>";
                 //console.log("Populating select, buildmethods is " + plg.buildmethods + ", length is " + plg.buildmethods.length);
+                
+                // v3.0: Add manual to global application button
+                mrevhtml += "<option value='m'>Manual</option>";
                 for (var i=0; i < plg.buildmethods.length; i++) {
                     mrevhtml += "<option value='" + i + "'>" + plg.buildmethods[i][0] + "</option>";
                 }
+                
                 mrevhtml += "</select></td></tr>";
                 //mrevhtml += "<td id='BMMethText'>No Method Selected.</td></tr>";
                 mrevhtml += "<tr><td><button id='BMGApplyBtn'>Apply to All</button></td></tr>";
@@ -542,6 +1705,7 @@ padding-left: 20px;}");
                 // Construct the colonist taxation method review pane
                 var ctmrevhtml = "<table id = 'CTMGSelTable'><tr><td colspan=2><b>Colonist Taxation Methods:</b><br /></td></tr>";
                 ctmrevhtml += "<tr><td rowspan = 2><select name='CTMGSelect' id='CTMGSelect'>";
+                ctmrevhtml += "<option value='m'>Manual</option>";
                 for (var i=0; i < plg.taxmethods.length; i++) {
                     if (plg.taxmethods[i].taxType == 'C' || plg.taxmethods[i].taxType == 'CN')
                         ctmrevhtml += "<option value='" + i + "'>" + plg.taxmethods[i].name + "</option>";
@@ -554,6 +1718,7 @@ padding-left: 20px;}");
                 // Construct the native taxation method review pane
                 var ntmrevhtml = "<table id = 'NTMGSelTable'><tr><td colspan=2><b>Native Taxation Methods:</b><br /></td></tr>";
                 ntmrevhtml += "<tr><td rowspan = 2><select name='NTMGSelect' id='NTMGSelect'>";
+                ntmrevhtml += "<option value='m'>Manual</option>";
                 for (var i=0; i < plg.taxmethods.length; i++) {
                     if (plg.taxmethods[i].taxType == 'N' || plg.taxmethods[i].taxType == 'CN')
                         ntmrevhtml += "<option value='" + i + "'>" + plg.taxmethods[i].name + "</option>";
@@ -565,10 +1730,11 @@ padding-left: 20px;}");
                 
                 // Display build button
                 html += "<br><table border='0' width='100%'>";
-                html += "<tr><td rowspan = 3><h1>Planetary Management v" + plugin_version + "</h1></td>"; 
+                html += "<tr><td rowspan = 2><h1>Planetary Management v" + plugin_version + "</h1></td>"; 
                 html += "<td align=center style='width: 100px; cursor:pointer;'><img class='BuildButton' align=center width=90px height=80px src='http://play.planets.nu/img/icons/blacksquares/planets.png'/></td></tr>";
                 html += "<tr><td class=PLBuildStatus>" + vgap.plugins["plManagerPlugin"].buildstatustext + "</td></tr>";
-                html += "<tr><td><input type='checkbox' name='RndFCCheck' id='RandomizeFCsCheck' value ='c' checked />Randomize Friendly Codes<br /></td></tr>";
+                html += "<tr><td><input type='checkbox' name='OvtxCheck' id='OvertaxCheck' value ='c' " + (vgap.plugins["plManagerPlugin"].overtax ? "checked" : "") + "/>Collect some tax on low population worlds (1%)<br /></td>";
+                html += "<td><input type='checkbox' name='RndFCCheck' id='RandomizeFCsCheck' value ='c' " + (vgap.plugins["plManagerPlugin"].fcrandomize ? "checked" : "") + "/>Randomize Friendly Codes<br /></td></tr>";
                 html += "</table><br />";
                 
                 /*
@@ -854,6 +2020,16 @@ padding-left: 20px;}");
                             plg.fcrandomize = true;
                         
                         if (debug) console.log("FC Randomize is now: " + plg.fcrandomize);
+                    });
+                    
+                    $('#OvertaxCheck').click(function () {
+                        console.log("Overtax CLICKED");
+                        if (plg.overtax == true) 
+                            plg.overtax = false;
+                        else
+                            plg.overtax = true;
+                        
+                        if (debug) console.log("Overtax is now: " + plg.overtax);
                     });
                     
                     $('.BuildButton').click(function() {
@@ -2315,7 +3491,7 @@ Parameters: <br />\
             taxModel1.midMaxHappy = "";
             taxModel1.maxsame = false;
             taxModel1.maxmethod = "Safe";
-            taxModel1.maxMinHappy = 50;
+            taxModel1.maxMinHappy = 40;
             taxModel1.maxMaxHappy = "";
             
             var taxModel2 = new Object();
@@ -3863,13 +5039,16 @@ Parameters: <br />\
                 if (debug) console.log("Planet " + planet.name + ": Taxing Colonists with " + ctaxsmallmodel.method + ", " + ctaxsmallmodel.minHappy + "->" + ctaxsmallmodel.maxHappy);
                 if (planet.clans < plg.taxmethods[ctaxindex].minClans){
                     if (debug) console.log("Planet " + planet.name + ": Col Tax < Min Clans, 0");
-                    planet.colonisttaxrate = 0;
+                    //planet.colonisttaxrate = 0;
+                    rate = 0;
                 }
                 else {
                     rate = plg.getTaxCols(planet,ctaxsmallmodel);
-                    planet.colonisttaxrate = rate;
+                    //planet.colonisttaxrate = rate;
                 }
-                                
+                planet.colonisttaxrate = rate;
+                var mcfromcols = plg.getColMCFromRate(planet,rate);
+                console.log("MCs from cols: " + mcfromcols);
                 /*
 					if (ctaxmodel.method == "Growth")
 						rate = plg.getTaxGrowthCols(planet,taxmodel);
@@ -3912,7 +5091,9 @@ Parameters: <br />\
                             if (debug) console.log("Planet " + planet.name + ": Native Assigning max tax");
                         }
                         if (debug) console.log("Planet " + planet.name + ": Taxing Natives with " + ntaxsmallmodel.method + ", " + ntaxsmallmodel.minHappy + "->" + ntaxsmallmodel.maxHappy);
-                        rate = plg.getTaxNat(planet,ntaxsmallmodel);
+                        rate = plg.getTaxNat(planet,ntaxsmallmodel,mcfromcols);
+                        
+                        
                         planet.nativetaxrate = rate;							
                     }
                     
@@ -3935,7 +5116,7 @@ Parameters: <br />\
                 
             },
         
-        getTaxNat: function(planet,taxmodel) {
+        getTaxNat: function(planet,taxmodel,mccollected) {
             
             var rate;
             
@@ -3974,34 +5155,58 @@ Parameters: <br />\
                         return 0;
                     }
             // First, determine the maximum amount we can collect:
-            
+            var player = vgap.getPlayer(planet.ownerid);
             var maxmc = planet.clans;
+            if (player != null) {
+				if (player.raceid == 1)
+					maxmc = planet.clans*2;
+			}
+			
             // Insectoids
             if (planet.nativetype == 6)	
                 maxmc += maxmc;
-            if (maxmc > 5000)
-                maxmc = 5000;
-            
-            
+            if (maxmc > (5000 - mccollected))
+                maxmc = 5000 - mccollected;
+            console.log("In NATTAX: maxmc = " + maxmc);
             var nhchng = (taxmodel.minHappy-hapmod) - (planet.nativehappypoints);
             rate = vgap.plugins["plManagerPlugin"].findNativeRate(planet, nhchng);
-            
+            console.log("NATRATE FOUND: " + rate);
             var mc = Math.round(rate * planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000);
+            console.log("NATMC FOUND: " + mc);
             // V1.20 - Insectoids overtaxed bug fix
             // We needed to double the mc here as well, not just calculate max above
             if (planet.nativetype == 6)	
                 mc += mc;
-            
+            // V3.0: Fed 200% tax fix
+            if (player != null) {
+				if (player.raceid == 1)
+					mc += mc;
+			}
+			
             // Check to find the suggested rate if we can't collect that many megacredits
             if (mc > maxmc) {
+				var divfactor = 1;
+				if (planet.nativetype == 6) divfactor = divfactor*2;
+				if (player != null) {
+					if (player.raceid == 1)
+						divfactor = divfactor * 2;
+				}
+				rate = Math.truncate((maxmc/divfactor) / (planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000));
+				/*
                 rate = Math.truncate(maxmc / (planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000));
                 if (planet.nativetype == 6)
                     rate = Math.truncate((maxmc/2) / (planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000));
+                */
+                console.log("MC>MAXMC: NEW RATE FOUND: " + rate);
+                // V3.0 Overtax addition - allow the player to tax 1% on new worlds to squeeze out those early megacredits
+                // if normally it would tax at 0% because they can't collect the full amount on 1%
+                if (vgap.plugins["plManagerPlugin"].overtax == true && rate == 0)
+					rate = 1;
             }
             
             // V2.41 - Cyborg taxing natives over 20% bugfix
             // Check player, if borg, don't tax over 20%
-            var player = vgap.getPlayer(planet.ownerid);
+            
             if (player != null) {
 				if (player.raceid == 6 && rate > 20)
 					rate = 20;
@@ -4018,6 +5223,26 @@ Parameters: <br />\
             
         },
         
+        getColMCFromRate: function(planet,rate) {
+			var mc = Math.round(rate * planet.clans / 1000);
+			var player = vgap.getPlayer(planet.ownerid);
+			if (player != null) {
+				if (player.raceid == 1)
+					mc = Math.round((rate * planet.clans / 1000)*2)
+			}
+			return mc;
+		},
+		
+		getNatMCFromRate: function(planet,rate) {
+			var mc = Math.round(rate * planet.nativegovernment * 20 / 100 * planet.nativeclans / 1000);
+            // V1.20 - Insectoids overtaxed bug fix
+            // We needed to double the mc here as well, not just calculate max above
+            if (planet.nativetype == 6)	
+                mc += mc;
+                
+            return mc;
+		},
+		
         getTaxCols: function(planet,taxmodel) {
             if (debug) console.log("Entered getTaxCols: " + taxmodel.method);
             var maxhapchng = vgap.plugins["plManagerPlugin"].ctctest(planet, 0);
@@ -4072,8 +5297,32 @@ Parameters: <br />\
             if (debug) console.log("In SAFE TAX Cols: minHappy = " + taxmodel.minHappy + ", colhappy = " + planet.colonisthappypoints + ", minHap - hapmod = " + (taxmodel.minHappy - hapmod));
             var nhchng = (taxmodel.minHappy-hapmod) - (planet.colonisthappypoints);
             //console.log("nhchng = " + nhchng);
-                       
-            return vgap.plugins["plManagerPlugin"].findColonistRate(planet, nhchng);
+			
+			var rate = vgap.plugins["plManagerPlugin"].findColonistRate(planet, nhchng);
+			
+			var mc = Math.round(rate * planet.clans / 1000);
+			var player = vgap.getPlayer(planet.ownerid);
+			if (player != null) {
+				if (player.raceid == 1)
+					mc = Math.round((rate * planet.clans / 1000)*2)
+			}
+			//console.log("IN TAXCOLS, expecting to collect " + mc + " mc at rate " + rate + ".");
+			// Check to find the suggested rate if we can't collect that many megacredits
+            
+            if (mc > maxmc) {
+				
+                rate = Math.truncate(maxmc / (planet.clans / 1000));
+                mc = Math.round(rate * planet.clans / 1000);
+                
+                if (player != null) {
+					if (player.raceid == 1) {
+						rate = Math.truncate(maxmc / ((planet.clans / 1000)*2));
+						mc = Math.round((rate * planet.clans / 1000)*2)
+					}
+				}
+				//console.log("MC > maxmc, new rate is " + rate + " and we expect to collect " + mc + "mcs.");
+			}
+            return rate;
             
         },
         
@@ -4229,7 +5478,7 @@ Parameters: <br />\
                     // Randomize
                     
                     var fcu = planet.friendlycode.toUpperCase();
-                    if (!(fcu == "NUK" || fcu == "ATT" || fcu == "BUM" || fcu == "DMP" || (fcu.substr(0, 2) == "PB")))
+                    if (!(fcu == "NUK" || fcu == "ATT" || fcu == "BUM" || fcu == "DMP" || (fcu.substr(0, 2) == "PB") || (fcu.substr(0, 2) == "MF")))
                     {
                         planet.friendlycode = vgap.randomFC();
                         planet.changed = 1;
